@@ -4,6 +4,7 @@ from groq import Groq
 import os
 from dotenv import load_dotenv
 from pathlib import Path
+from json_repair import repair_json
 
 load_dotenv(f"{Path.cwd()}/config.env")
 
@@ -11,7 +12,7 @@ client = Groq(
     api_key=os.getenv("GROQ_API_KEY"),
 )
 
-st.set_page_config(page_title="Grammar Assistant", page_icon="📚")
+st.set_page_config(page_title="Grammar Chatbot", page_icon="📚")
 
 st.markdown("""
 <style>
@@ -49,6 +50,10 @@ th, td {
 
 st.title("Grammar ChatBot 📝")
 
+if st.button("Clear Chat"):
+    st.session_state.messages = []
+    st.rerun()
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -61,6 +66,7 @@ if prompt := st.chat_input("Enter your text or ask a grammar-related question"):
     with st.chat_message("user"):
         st.markdown(prompt)
 
+if prompt:
     with st.chat_message("assistant"):
         with open("prompt.txt", "r") as file:
             system_prompt = file.read()
@@ -70,7 +76,7 @@ if prompt := st.chat_input("Enter your text or ask a grammar-related question"):
         chat_completion = client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
+                *[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
             ],
             model="llama-3.1-70b-versatile",
             temperature=0.6,
@@ -84,11 +90,12 @@ if prompt := st.chat_input("Enter your text or ask a grammar-related question"):
         message_placeholder.markdown("Processing response...")
 
         try:
-            response_json = json.loads(full_response)
+            repaired_json = repair_json(full_response)
+            response_json = json.loads(repaired_json)
             
             if "message" in response_json:
                 # This is a chat-type message
-                st.markdown(response_json["message"])
+                st.markdown(response_json["message"], unsafe_allow_html=True)
                 full_response = response_json["message"]
             else:
                 # This is a grammar correction
